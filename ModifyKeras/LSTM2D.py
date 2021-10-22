@@ -99,19 +99,21 @@ class LSTM2D(LSTMCell):
 
 if __name__ == '__main__':
     # create a cell
-    test = LSTM2D(100)
+    cells = [LSTM2D(5), LSTM2D(5)]
 
     # Input timesteps=10, features=7
-    in1 = Input(shape=(10, 7))
-    out1 = RNN(test, return_sequences=True)(in1)
+    in1 = Input(shape=(10, 5)) # (timesteps, input_dim)
+    out1 = RNN(cells, return_sequences=True)(in1)
 
     M = Model(inputs=[in1], outputs=[out1])
     M.compile(keras.optimizers.Adam(), loss='mse')
 
-    ans = M.predict(np.arange(7 * 10, dtype=np.float32).reshape(1, 10, 7))
+    ans = M.predict(np.arange(5 * 10, dtype=np.float32).reshape(1, 10, 5))
 
     print(ans.shape)
     # state_h
-    print(ans[0, 0, 0, :])
+    print(ans[0, 0, :])
     # state_c
-    print(ans[0, 0, 1, :])
+    print(ans[0, 1, :])
+
+    print(ans)
