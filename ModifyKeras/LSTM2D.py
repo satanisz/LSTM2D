@@ -1,7 +1,7 @@
 import numpy as np
 from keras import backend as K
 from keras import Input, Model
-from keras.layers.recurrent import _generate_dropout_mask, LSTMCell, RNN
+from keras.layers.recurrent import _generate_dropout_mask, LSTMCell, RNN, SimpleRNNCell
 import keras
 import tensorflow as tf
 
@@ -87,8 +87,8 @@ class LSTM2D(LSTMCell):
 
             i = self.recurrent_activation(z0)
             f = self.recurrent_activation(z1)
-            c = f * c_tm1 + i * self.activation(z2)
             o = self.recurrent_activation(z3)
+            c = o * f * c_tm1 + o * i * self.activation(z2)
 
         h = o * self.activation(c)
         if 0 < self.dropout + self.recurrent_dropout:
@@ -99,17 +99,25 @@ class LSTM2D(LSTMCell):
 
 if __name__ == '__main__':
     # create a cell
-    cells = [LSTM2D(5), LSTM2D(5)]
-
+    # cells = [SimpleRNNCell(5), SimpleRNNCell(5)]
+    cells = SimpleRNNCell(5)
+    print("cells.get_config()")
+    print(cells.get_config())
+    cells.build((10,6))
+    print(cells.kernel)
     # Input timesteps=10, features=7
-    in1 = Input(shape=(10, 5)) # (timesteps, input_dim)
+    in1 = Input(shape=(10, 6)) # (timesteps, input_dim)
+
+    print("BUILD RNN")
     out1 = RNN(cells, return_sequences=True)(in1)
 
+    print("MODEL")
     M = Model(inputs=[in1], outputs=[out1])
+    print("COMPILE")
     M.compile(keras.optimizers.Adam(), loss='mse')
-
-    ans = M.predict(np.arange(5 * 10, dtype=np.float32).reshape(1, 10, 5))
-
+    print("PREDICT")
+    ans = M.predict(np.arange(6 * 10, dtype=np.float32).reshape(1, 10, 6))
+    print("END")
     print(ans.shape)
     # state_h
     print(ans[0, 0, :])
