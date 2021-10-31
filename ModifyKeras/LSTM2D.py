@@ -3,16 +3,88 @@ from keras import backend as K
 from keras import Input, Model
 from keras.layers.recurrent import _generate_dropout_mask, LSTMCell, RNN, SimpleRNNCell
 import keras
+from keras import initializers
 import tensorflow as tf
 
 class LSTM2D(LSTMCell):
+
+    def build(self, input_shape):
+        input_dim = input_shape[-1]
+
+        if type(self.recurrent_initializer).__name__ == 'Identity':
+            def recurrent_identity(shape, gain=1., dtype=None):
+                del dtype
+                return gain * np.concatenate(
+                    [np.identity(shape[0])] * (shape[1] // shape[0]), axis=1)
+
+            self.recurrent_initializer = recurrent_identity
+
+        self.kernel = self.add_weight(shape=(input_dim, self.units * 4),
+                                      name='kernel',
+                                      initializer=self.kernel_initializer,
+                                      regularizer=self.kernel_regularizer,
+                                      constraint=self.kernel_constraint)
+        self.recurrent_kernel = self.add_weight(
+            shape=(self.units, self.units * 4),
+            name='recurrent_kernel',
+            initializer=self.recurrent_initializer,
+            regularizer=self.recurrent_regularizer,
+            constraint=self.recurrent_constraint)
+
+        if self.use_bias:
+            if self.unit_forget_bias:
+                @K.eager
+                def bias_initializer(_, *args, **kwargs):
+                    return K.concatenate([
+                        self.bias_initializer((self.units,), *args, **kwargs),
+                        initializers.Ones()((self.units,), *args, **kwargs),
+                        self.bias_initializer((self.units * 2,), *args, **kwargs),
+                    ])
+            else:
+                bias_initializer = self.bias_initializer
+            self.bias = self.add_weight(shape=(self.units * 4,),
+                                        name='bias',
+                                        initializer=bias_initializer,
+                                        regularizer=self.bias_regularizer,
+                                        constraint=self.bias_constraint)
+        else:
+            self.bias = None
+
+        self.kernel_i = self.kernel[:, :self.units]
+        self.kernel_f = self.kernel[:, self.units: self.units * 2]
+        self.kernel_c = self.kernel[:, self.units * 2: self.units * 3]
+        self.kernel_o = self.kernel[:, self.units * 3:]
+
+        self.recurrent_kernel_i = self.recurrent_kernel[:, :self.units]
+        self.recurrent_kernel_f = (
+            self.recurrent_kernel[:, self.units: self.units * 2])
+        self.recurrent_kernel_c = (
+            self.recurrent_kernel[:, self.units * 2: self.units * 3])
+        self.recurrent_kernel_o = self.recurrent_kernel[:, self.units * 3:]
+
+        if self.use_bias:
+            self.bias_i = self.bias[:self.units]
+            self.bias_f = self.bias[self.units: self.units * 2]
+            self.bias_c = self.bias[self.units * 2: self.units * 3]
+            self.bias_o = self.bias[self.units * 3:]
+        else:
+            self.bias_i = None
+            self.bias_f = None
+            self.bias_c = None
+            self.bias_o = None
+        self.built = True
+
     def call(self, inputs, states, training=None):
+        print("@@@ CALL")
+        print("inputs shape: ", inputs)
+        print("states shape: ", states)
         if 0 < self.dropout < 1 and self._dropout_mask is None:
             self._dropout_mask = _generate_dropout_mask(
                 K.ones_like(inputs),
                 self.dropout,
                 training=training,
                 count=4)
+            print("@@@ dropout_mask: ", self._dropout_mask)
         if (0 < self.recurrent_dropout < 1 and
                 self._recurrent_dropout_mask is None):
             self._recurrent_dropout_mask = _generate_dropout_mask(
@@ -20,6 +92,7 @@ class LSTM2D(LSTMCell):
                 self.recurrent_dropout,
                 training=training,
                 count=4)
+            print("@@@ recurrent_dropout_mask: ", self._recurrent_dropout_mask)
 
             # dropout matrices for input units
         dp_mask = self._dropout_mask
@@ -28,6 +101,7 @@ class LSTM2D(LSTMCell):
 
         h_tm1 = states[0]  # previous memory state
         c_tm1 = states[1]  # previous carry state
+        print("@@@ previous states: ", h_tm1, c_tm1)
 
         if self.implementation == 1:
             print("Implementation: ", self.implementation)
@@ -91,37 +165,43 @@ class LSTM2D(LSTMCell):
             c = o * f * c_tm1 + o * i * self.activation(z2)
 
         h = o * self.activation(c)
+        print("@@@ h: ", h)
+        print('@@@ c: ', c)
         if 0 < self.dropout + self.recurrent_dropout:
             if training is None:
                 h._uses_learning_phase = True
         # return tf.expand_dims(tf.concat([h,c],axis=0),0), [h, c]
+        print("@@@ RETURN")
         return h, [h, c]
 
 if __name__ == '__main__':
     # create a cell
     # cells = [SimpleRNNCell(5), SimpleRNNCell(5)]
-    cells = SimpleRNNCell(5)
+    cell = LSTM2D(5)
+    # cell = SimpleRNNCell(5)
     print("cells.get_config()")
-    print(cells.get_config())
-    cells.build((10,6))
-    print(cells.kernel)
+    print(cell.get_config())
+    cell.build((10,7))
+    print(cell.kernel)
     # Input timesteps=10, features=7
-    in1 = Input(shape=(10, 6)) # (timesteps, input_dim)
+    in1 = Input(shape=(10, 7)) # (timesteps, input_dim)
 
     print("BUILD RNN")
-    out1 = RNN(cells, return_sequences=True)(in1)
+    out1 = RNN(cell, return_sequences=True)(in1)
 
     print("MODEL")
     M = Model(inputs=[in1], outputs=[out1])
     print("COMPILE")
     M.compile(keras.optimizers.Adam(), loss='mse')
     print("PREDICT")
-    ans = M.predict(np.arange(6 * 10, dtype=np.float32).reshape(1, 10, 6))
+    ans = M.predict(np.arange(7 * 10, dtype=np.float32).reshape(1, 10, 7))
     print("END")
     print(ans.shape)
     # state_h
+    print('state_h')
     print(ans[0, 0, :])
     # state_c
+    print('state_c')
     print(ans[0, 1, :])
-
+    print('all')
     print(ans)
