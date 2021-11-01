@@ -6,6 +6,8 @@ import keras
 from keras import initializers
 import tensorflow as tf
 
+from prepareOrlen import *
+
 class LSTM2D(LSTMCell):
 
     def build(self, input_shape):
@@ -175,16 +177,25 @@ class LSTM2D(LSTMCell):
         return h, [h, c]
 
 if __name__ == '__main__':
+
+    # prepare data
+    timesteps = 7
+    X, Y = getdata1D('pkn_d.csv', timesteps, 'Zamkniecie')
+    print("@@@ X.shape: ", X.shape)
+    print("@@@ Y.shape: ", Y.shape)
+    features = 6
+
+
     # create a cell
     # cells = [SimpleRNNCell(5), SimpleRNNCell(5)]
-    cell = LSTM2D(5)
+    cell = LSTM2D(timesteps)
     # cell = SimpleRNNCell(5)
     print("cells.get_config()")
     print(cell.get_config())
-    cell.build((10,7))
+    cell.build((features, timesteps))
     print(cell.kernel)
     # Input timesteps=10, features=7
-    in1 = Input(shape=(10, 7)) # (timesteps, input_dim)
+    in1 = Input(shape=(features, timesteps))
 
     print("BUILD RNN")
     out1 = RNN(cell, return_sequences=True)(in1)
@@ -193,8 +204,10 @@ if __name__ == '__main__':
     M = Model(inputs=[in1], outputs=[out1])
     print("COMPILE")
     M.compile(keras.optimizers.Adam(), loss='mse')
+    M.fit(X, Y, epochs=100, batch_size=10, verbose=2)
     print("PREDICT")
-    ans = M.predict(np.arange(7 * 10, dtype=np.float32).reshape(1, 10, 7))
+    # ans = M.predict(np.arange(features * timesteps, dtype=np.float32).reshape(1, timesteps, features))
+    ans = M.predict(X[-1])
     print("END")
     print(ans.shape)
     # state_h
