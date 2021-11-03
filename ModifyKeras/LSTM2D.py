@@ -2,13 +2,16 @@ import numpy as np
 from keras import backend as K
 from keras import Input, Model
 from keras.layers.recurrent import _generate_dropout_mask, LSTMCell, RNN, SimpleRNNCell
+from keras.layers import LSTM
+from keras.layers import Dense
 import keras
 from keras import initializers
 import tensorflow as tf
+from keras import Sequential
 
 from prepareOrlen import *
 
-class LSTM2D(LSTMCell):
+class LSTM2DCell(LSTMCell):
 
     def build(self, input_shape):
         input_dim = input_shape[-1]
@@ -177,44 +180,53 @@ class LSTM2D(LSTMCell):
         return h, [h, c]
 
 if __name__ == '__main__':
-
+    #(probki, czas, cechy) (5483, 7, 6)
     # prepare data
     timesteps = 7
     X, Y = getdata1D('pkn_d.csv', timesteps, 'Zamkniecie')
-    print("@@@ X.shape: ", X.shape)
-    print("@@@ Y.shape: ", Y.shape)
+    print("@@@ X.shape: ", X.shape) # (5483, 6, 7)
+    print("@@@ Y.shape: ", Y.shape) # (5483,)
     features = 6
+    Y = Y.reshape(-1,1) # (5483. 1)
 
-
-    # create a cell
-    # cells = [SimpleRNNCell(5), SimpleRNNCell(5)]
-    cell = LSTM2D(timesteps)
-    # cell = SimpleRNNCell(5)
-    print("cells.get_config()")
-    print(cell.get_config())
-    cell.build((features, timesteps))
-    print(cell.kernel)
-    # Input timesteps=10, features=7
-    in1 = Input(shape=(features, timesteps))
-
-    print("BUILD RNN")
-    out1 = RNN(cell, return_sequences=True)(in1)
-
-    print("MODEL")
-    M = Model(inputs=[in1], outputs=[out1])
-    print("COMPILE")
-    M.compile(keras.optimizers.Adam(), loss='mse')
-    M.fit(X, Y, epochs=100, batch_size=10, verbose=2)
+    model = Sequential()
+    model.add(LSTM(timesteps, input_shape=(features, timesteps)))
+    model.add(Dense(1))
+    model.compile(loss='mean_squared_error', optimizer='adam')
+    model.fit(X, Y, epochs=20, batch_size=1, verbose=2)
     print("PREDICT")
-    # ans = M.predict(np.arange(features * timesteps, dtype=np.float32).reshape(1, timesteps, features))
-    ans = M.predict(X[-1])
-    print("END")
-    print(ans.shape)
-    # state_h
-    print('state_h')
-    print(ans[0, 0, :])
-    # state_c
-    print('state_c')
-    print(ans[0, 1, :])
-    print('all')
-    print(ans)
+    ans = model.predict(np.arange(features * timesteps, dtype=np.float32).reshape(1, timesteps, features))
+
+    #
+    # # create a cell
+    # # cells = [SimpleRNNCell(5), SimpleRNNCell(5)]
+    # cell = LSTM2DCell(timesteps)
+    # # cell = SimpleRNNCell(5)
+    # print("cells.get_config()")
+    # print(cell.get_config())
+    # cell.build((features, timesteps))
+    # print(cell.kernel)
+    # # Input timesteps=10, features=7
+    # in1 = Input(shape=(features, timesteps))
+    #
+    # print("BUILD RNN")
+    # out1 = RNN(cell)(in1)
+    #
+    # print("MODEL")
+    # M = Model(inputs=[in1], outputs=[out1])
+    # print("COMPILE")
+    # M.compile(keras.optimizers.Adam(), loss='mse')
+    # M.fit(X, Y, epochs=100, batch_size=10, verbose=2)
+    # print("PREDICT")
+    # # ans = M.predict(np.arange(features * timesteps, dtype=np.float32).reshape(1, timesteps, features))
+    # ans = M.predict(X[-1])
+    # print("END")
+    # print(ans.shape)
+    # # state_h
+    # print('state_h')
+    # print(ans[0, 0, :])
+    # # state_c
+    # print('state_c')
+    # print(ans[0, 1, :])
+    # print('all')
+    # print(ans)
