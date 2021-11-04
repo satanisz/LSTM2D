@@ -6,12 +6,20 @@ from keras.layers import LSTM
 from keras.layers import Dense
 import keras
 from keras import initializers
+from keras import regularizers
 import tensorflow as tf
 from keras import Sequential
+import warnings
 
 from prepareOrlen import *
 
+from keras.legacy import interfaces
+
+
 class LSTM2DCell(LSTMCell):
+
+    def __init(self, *args, **kwargs):
+        super(LSTM2DCell, self).__init__(*args, **kwargs)
 
     def build(self, input_shape):
         input_dim = input_shape[-1]
@@ -179,6 +187,75 @@ class LSTM2DCell(LSTMCell):
         print("@@@ RETURN")
         return h, [h, c]
 
+
+class LSTM2D(LSTM): # swap LSTMCell in LSTM
+
+    @interfaces.legacy_recurrent_support
+    def __init__(self, units,
+                 activation='tanh',
+                 recurrent_activation='sigmoid',
+                 use_bias=True,
+                 kernel_initializer='glorot_uniform',
+                 recurrent_initializer='orthogonal',
+                 bias_initializer='zeros',
+                 unit_forget_bias=True,
+                 kernel_regularizer=None,
+                 recurrent_regularizer=None,
+                 bias_regularizer=None,
+                 activity_regularizer=None,
+                 kernel_constraint=None,
+                 recurrent_constraint=None,
+                 bias_constraint=None,
+                 dropout=0.,
+                 recurrent_dropout=0.,
+                 implementation=2,
+                 return_sequences=False,
+                 return_state=False,
+                 go_backwards=False,
+                 stateful=False,
+                 unroll=False,
+                 **kwargs):
+        if implementation == 0:
+            warnings.warn('`implementation=0` has been deprecated, '
+                          'and now defaults to `implementation=1`.'
+                          'Please update your layer call.')
+        if K.backend() == 'theano' and (dropout or recurrent_dropout):
+            warnings.warn(
+                'RNN dropout is no longer supported with the Theano backend '
+                'due to technical limitations. '
+                'You can either set `dropout` and `recurrent_dropout` to 0, '
+                'or use the TensorFlow backend.')
+            dropout = 0.
+            recurrent_dropout = 0.
+
+        cell = LSTM2DCell(units, # swap inner Cell
+                        activation=activation,
+                        recurrent_activation=recurrent_activation,
+                        use_bias=use_bias,
+                        kernel_initializer=kernel_initializer,
+                        recurrent_initializer=recurrent_initializer,
+                        unit_forget_bias=unit_forget_bias,
+                        bias_initializer=bias_initializer,
+                        kernel_regularizer=kernel_regularizer,
+                        recurrent_regularizer=recurrent_regularizer,
+                        bias_regularizer=bias_regularizer,
+                        kernel_constraint=kernel_constraint,
+                        recurrent_constraint=recurrent_constraint,
+                        bias_constraint=bias_constraint,
+                        dropout=dropout,
+                        recurrent_dropout=recurrent_dropout,
+                        implementation=implementation)
+        super(LSTM, self).__init__(cell,
+                                   return_sequences=return_sequences,
+                                   return_state=return_state,
+                                   go_backwards=go_backwards,
+                                   stateful=stateful,
+                                   unroll=unroll,
+                                   **kwargs)
+        self.activity_regularizer = regularizers.get(activity_regularizer)
+
+
+
 if __name__ == '__main__':
     #(probki, czas, cechy) (5483, 7, 6)
     # prepare data
@@ -190,12 +267,12 @@ if __name__ == '__main__':
     Y = Y.reshape(-1,1) # (5483. 1)
 
     model = Sequential()
-    model.add(LSTM(timesteps, input_shape=(features, timesteps)))
+    model.add(LSTM2D(timesteps, input_shape=(features, timesteps)))
     model.add(Dense(1))
     model.compile(loss='mean_squared_error', optimizer='adam')
     model.fit(X, Y, epochs=20, batch_size=1, verbose=2)
     print("PREDICT")
-    ans = model.predict(np.arange(features * timesteps, dtype=np.float32).reshape(1, timesteps, features))
+    ans = model.predict(np.arange(features * timesteps, dtype=np.float32).reshape(1, features, timesteps))
 
     #
     # # create a cell

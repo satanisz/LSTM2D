@@ -23,6 +23,9 @@ class Parent(object):
     def __call__(self, name):
         print("hello world, ", name)
 
+    def someMethod(self):
+        print("Method in Parent")
+
 
 class Person(Parent):
 
@@ -40,3 +43,4 @@ class Man(Person):
 
 g = Man()
 g('Przemek')
+g.someMethod()
